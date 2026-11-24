@@ -1,0 +1,48 @@
+name: Publish to the Go module proxy
+
+# Runs when a GitHub release is published: the tests on the oldest supported Go and on the newest, then a request to
+# proxy.golang.org for the new version, so that pkg.go.dev lists it at once. Go modules have no registry account or
+# token: the tag is the release. The release tag must match Version in client.go, for example v1.1.1.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: ["1.13", "1.21", "stable"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Vet and test on Go ${{ matrix.go }}
+        run: |
+          go vet ./...
+          go test -count=1 ./...
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check that the release tag matches Version in client.go
+        run: |
+          version="$(sed -n 's/^const Version = "\(.*\)"$/\1/p' client.go)"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "Release tag ${GITHUB_REF_NAME} does not match Version ${version}"
+            exit 1
+          fi
+
+      - name: Ask the Go module proxy for the new version
+        run: |
+          curl -sf -A "mygeocode-go release workflow" \
+            "https://proxy.golang.org/github.com/mygeocode/mygeocode-go/@v/${GITHUB_REF_NAME}.info"

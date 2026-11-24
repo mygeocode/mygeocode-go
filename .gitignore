@@ -1,0 +1,9 @@
+# build output, caches and local tooling
+/bin/
+*.test
+*.out
+*.exe
+coverage.*
+go.work
+go.work.sum
+.env
